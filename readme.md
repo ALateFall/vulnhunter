@@ -23,7 +23,7 @@ Manually tracing a function's call sources or its ultimate impact in a complex b
 - **One-Click Highlighting:** The plugin automatically calculates and highlights all possible call chains connecting the two functions, printing the results to the Output window.
 - **Path Switching:** When multiple call paths exist, you can use the hotkey (`Shift+I`) to quickly switch between and preview different call chains.
 
-![call_chain](./images/call_chain.gif)
+![call_chain](images/call_chain.gif)
 
 #### 2. Advanced Cross-References 😄 (Not Implemented yet)
 
