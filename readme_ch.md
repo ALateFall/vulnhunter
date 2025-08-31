@@ -23,6 +23,8 @@
 - **一键高亮：** 插件将自动计算并高亮显示出连接这两个函数的所有可能调用链并将结果输出到`output`窗口。
 - **路径切换：** 当存在多条调用路径时，可以通过快捷键 (`Shift+I`) 快速在不同的调用链之间进行切换和预览。
 
+![call_chain](C:\ltfallfiles\blog_md\项目\VulnHunter\images\call_chain.gif)
+
 ### 2. 高级交叉引用😄 (Advanced Cross-References) (Not Implement yet)
 
 `IDA Pro` 的原生交叉引用（`Xrefs`）功能强大但相对基础。`VulnHunter` 在此之上构建了一个高级查询引擎，让您能够以更精细、更具语义化的方式筛选交叉引用。
