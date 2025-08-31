@@ -43,7 +43,7 @@ By leveraging a custom Machine Code Protocol (MCP) based on fastMCP, we seamless
 - **Automated Taint Analysis:** Combined with the **Highlight Call Chain** feature, you can let an LLM act as your taint analysis engine. Simply provide the LLM with a taint source and sink, and it will automatically call VulnHunter's API to find and analyze potential taint propagation paths, achieving end-to-end vulnerability discovery.
 - **Intelligent Dangerous Function Identification:** Combined with the **Advanced Cross-References** feature, an LLM can automatically execute complex queries. For example, you can write a prompt that instructs the LLM to find all calls to `memcpy` where the length argument originates from user input and analyze if a buffer overflow risk exists.
 
-![mcp](images\mcp.gif)
+![mcp](images/mcp.gif)
 
 Currently, VulnHunter's IDA Pro MCP has implemented the following IDA Pro interfaces:
 
