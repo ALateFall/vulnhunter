@@ -46,6 +46,8 @@
 - **自动化污点分析：** 结合 **调用链高亮** 功能，您可以让 `LLM` 作为污点分析引擎。只需告诉 `LLM` 污点源（`Source`）和污点汇（`Sink`），它就能自动调用 `VulnHunter` 的 `API` 来寻找并分析潜在的污点传播路径，实现端到端的全链路漏洞挖掘。
 - **智能危险函数识别：** 结合 **高级交叉引用** 功能，LLM 可以自动执行复杂的查询。例如，您可以编写一个 `Prompt`，让 `LLM` 自动去寻找所有调用了 `memcpy` 且其长度参数来自于用户输入的函数，并分析其是否存在缓冲区溢出风险。
 
+![mcp](C:\ltfallfiles\blog_md\项目\VulnHunter\images\mcp.gif)
+
 目前，`VulnHunter` 实现的 `IDA Pro MCP` 已经实现了如下 `IDA Pro`的接口：
 
 - `get_function_name_by_addr`：通过函数地址获得函数名称。
