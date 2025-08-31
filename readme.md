@@ -1,116 +1,119 @@
-# VulnHunter - IDA Pro 漏洞挖掘辅助插件🛠
+# VulnHunter - An Assistant Plugin for IDA Pro Vulnerability Hunting 🛠
 
-**中文** | **[English](https://www.google.com/search?q=./README_EN.md)**
+**[中文](https://github.com/ALateFall/vulnhunter/blob/master/readme_ch.md)** | **English**
 
-`VulnHunter` 是一款为逆向工程师和漏洞研究人员设计的 `IDA Pro` 插件，旨在大幅提升二进制文件漏洞挖掘的**效率**和深度。它通过一系列强大的增强功能，将繁琐的手动分析流程自动化，并基于`MCP`，引入了大型语言模型（LLM）的分析能力，为漏洞挖掘开辟了新的可能性。
+`VulnHunter` is an IDA Pro plugin designed for reverse engineers and vulnerability researchers to significantly improve the efficiency and depth of binary vulnerability analysis. It automates tedious manual analysis workflows through a series of powerful enhancements and introduces the analytical capabilities of Large Language Models (LLMs) via the Machine Code Protocol (MCP), opening up new possibilities for vulnerability hunting.
 
-**⚠️ 项目状态：** 本项目正在积极开发中。欢迎您通过提交 [Issue](https://github.com/ALateFall/vulnhunter/issues) 或 Pull Request 来为项目贡献力量！
+**⚠️ Project Status:** This project is under active development. We welcome you to contribute by submitting [Issues]((https://github.com/ALateFall/vulnhunter/issues)) or Pull Requests!
 
-## 🌟 VulnHunter 有什么用🤠？
+### 🌟 What does VulnHunter do? 🤠
 
-- **调用链可视化：** 告别手动追踪函数调用，一键高亮从起点到终点的完整调用路径。
-- **高级交叉引用：** 超越 IDA Pro 原生功能，实现复杂、可定制的交叉引用查询。
-- **LLM 赋能分析：** 集成自定义函数上下文协议（MCP），将强大的 AI 模型引入逆向工程，实现自动化污点分析和危险函数识别。
-- **高效快捷键操作：** 精心设计的快捷键，让您在不同的调用链和分析路径之间流畅切换。
+- **Call Chain Visualization:** Say goodbye to manually tracing function calls. Highlight the complete call path from a starting point to a destination with a single click.
+- **Advanced Cross-References:** Go beyond IDA Pro's native capabilities with complex and customizable cross-reference queries.
+- **LLM-Powered Analysis:** Integrates a custom Machine Code Protocol (MCP) to bring powerful AI models into your reverse engineering workflow, enabling automated taint analysis and dangerous function identification.
+- **Efficient Shortcuts:** Thoughtfully designed hotkeys allow you to switch between different call chains and analysis paths smoothly.
 
-## ✨ 主要功能
+### ✨ Main Features
 
-### 1. 函数调用链高亮😀 (Highlight Call Chain)
+#### 1. Highlight Call Chain 😀
 
-在复杂的二进制文件中，手动追溯一个函数的调用来源或最终影响是一项极其耗时且容易出错的工作。VulnHunter 彻底改变了这一现状。
+Manually tracing a function's call sources or its ultimate impact in a complex binary is extremely time-consuming and error-prone. VulnHunter completely changes this.
 
-- **起点/终点选择：** 只需在反汇编或反编译窗口中选定一个起始函数和一个目标函数。
-- **一键高亮：** 插件将自动计算并高亮显示出连接这两个函数的所有可能调用链并将结果输出到`output`窗口。
-- **路径切换：** 当存在多条调用路径时，可以通过快捷键 (`Shift+I`) 快速在不同的调用链之间进行切换和预览。
+- **Start/End Point Selection:** Simply select a start function and a target function in the disassembly or decompilation view.
+- **One-Click Highlighting:** The plugin automatically calculates and highlights all possible call chains connecting the two functions, printing the results to the Output window.
+- **Path Switching:** When multiple call paths exist, you can use the hotkey (`Shift+I`) to quickly switch between and preview different call chains.
 
-### 2. 高级交叉引用😄 (Advanced Cross-References) (Not Implement yet)
+#### 2. Advanced Cross-References 😄 (Not Implemented yet)
 
-`IDA Pro` 的原生交叉引用（`Xrefs`）功能强大但相对基础。`VulnHunter` 在此之上构建了一个高级查询引擎，让您能够以更精细、更具语义化的方式筛选交叉引用。
+IDA Pro's native cross-references (Xrefs) are powerful but relatively basic. VulnHunter builds an advanced query engine on top of them, allowing you to filter cross-references in a more granular and semantic way.
 
-#### 对于函数💻：
+- **For Functions 💻:**
+  - **Constant Argument Filtering:** Quickly find all locations where a function is called with a specific constant argument (e.g., `0`, `NULL`, or a specific flag).
+  - **Contextual Function Filtering:** Filter for functions that call a target function, and also check if these caller functions invoke other specific functions.
+- **For Global Variables 🔍:**
+  - **Assignment/Usage Separation:** Clearly distinguish between all locations where a global variable is written to (assigned) and where it is read from (used).
 
-- **常量参数筛选：** 快速找到所有调用某函数时，传入特定常量参数（如 `0`, `NULL`, 或者某个危险标志位）的位置。
-- **上下文函数筛选：** 筛选调用了目标函数 `A` 的所有函数 `F`，并进一步要求 `F` 内部必须（或不能）调用另一个指定的函数 `B`。
+#### 3. Custom MCP & LLM Integration 🤖
 
-#### 对于全局变量🔍：
+By leveraging a custom Machine Code Protocol (MCP) based on fastMCP, we seamlessly integrate IDA Pro's deep binary analysis capabilities with the reasoning power of Large Language Models (LLMs).
 
-- **赋值/使用场景分离：** 清晰地区分出对一个全局变量进行赋值（写入）和使用（读取）的所有位置。
+- **Functionality Exposure:** The plugin exposes its core "Find Call Chain" and "Advanced Cross-References" features as an API to the LLM.
+- **Automated Taint Analysis:** Combined with the **Highlight Call Chain** feature, you can let an LLM act as your taint analysis engine. Simply provide the LLM with a taint source and sink, and it will automatically call VulnHunter's API to find and analyze potential taint propagation paths, achieving end-to-end vulnerability discovery.
+- **Intelligent Dangerous Function Identification:** Combined with the **Advanced Cross-References** feature, an LLM can automatically execute complex queries. For example, you can write a prompt that instructs the LLM to find all calls to `memcpy` where the length argument originates from user input and analyze if a buffer overflow risk exists.
 
-### 3. 自实现 MCP 与 LLM 集成🤖 (Custom MCP for LLM)
+Currently, VulnHunter's IDA Pro MCP has implemented the following IDA Pro interfaces:
 
-通过基于 `fastMCP` 实现的自定义函数上下文协议（`MCP`），我们将 `IDA Pro` 的深度二进制分析能力与大型语言模型（`LLM`）的推理能力无缝结合。
+- `get_function_name_by_addr`: Get the function name from a given address.
+- `get_function_addr_by_name`: Get the function address from a given name.
+- `Youtube`: Get metadata about the IDA project, such as architecture, version, decompiler status, etc.
+- `decompile_function`: Get the pseudo-code for a function at a specified address. This requires an active IDA Pro decompiler.
+- `disassemble_function`: Get the assembly code for a function at a specified address.
+- `find_call_chain`: Find the function call chain from a start function name to a destination function name. This is a core feature of VulnHunter.
 
-- **功能实现：** 插件将核心的“函数调用链查找”和“高级交叉引用”功能作为 `API` 暴露给` LLM`。
-- **自动化污点分析：** 结合 **调用链高亮** 功能，您可以让 `LLM` 作为污点分析引擎。只需告诉 `LLM` 污点源（`Source`）和污点汇（`Sink`），它就能自动调用 `VulnHunter` 的 `API` 来寻找并分析潜在的污点传播路径，实现端到端的全链路漏洞挖掘。
-- **智能危险函数识别：** 结合 **高级交叉引用** 功能，LLM 可以自动执行复杂的查询。例如，您可以编写一个 `Prompt`，让 `LLM` 自动去寻找所有调用了 `memcpy` 且其长度参数来自于用户输入的函数，并分析其是否存在缓冲区溢出风险。
+### 🔧 Installation and Configuration
 
-目前，`VulnHunter` 实现的 `IDA Pro MCP` 已经实现了如下 `IDA Pro`的接口：
+#### Prerequisites
 
-- `get_function_name_by_addr`：通过函数地址获得函数名称。
-- `get_function_addr_by_name`：通过函数名称获得函数地址。
-- `get_metadata`：获得`IDA`项目的元数据，例如架构、版本、反编译器状态等等。
-- `decompile_function`：获得指定地址函数的伪代码。该功能需要`IDA Pro` 的反编译功能存在才可以使用。
-- `disassemble_functiopn`：获得指定地址函数的汇编代码。
-- `find_call_chain`：找到从起始函数名称到目标函数名称的函数调用链。这是`VulnHunter`的核心功能之一。
+- **IDA Pro 9.0** or newer.
+- **Python 3.11** or newer (the version bundled with IDA Pro is recommended).
+- (Optional, for LLM features) A platform that can invoke MCP, such as `cline`.
+- (Optional, for LLM features) A valid LLM API Key (e.g., OpenAI, Anthropic, or a locally deployed model API).
 
-## 🔧 安装与配置
+#### Installation Steps
 
-### 前置要求
+1. **Download the Plugin:**
 
-- **IDA Pro 9.0 或更高版本。**
-- **Python 3.11 或更高版本** （建议使用与 IDA Pro 捆绑的版本）。
-- (可选，如需使用 LLM 功能) 拥有一个可以调用`MCP`的平台，例如`cline`
-- (可选，如需使用 LLM 功能) 拥有一个可用的 `LLM API Key`（如 `OpenAI`,`Anthropic`, 或本地部署的模型 `API`）。
+   - Download the two `.py` files from this project: `vulnhunter.py` and `vulnhunter_mcp.py`.
 
-### 安装步骤
+2. **Install the Plugin:**
 
-1. **下载插件：**
+   - Copy both `vulnhunter.py` and `vulnhunter_mcp.py` into your IDA Pro `plugins` directory.
+     - **Windows:** `IDA Pro\plugins`
+     - **Linux/macOS:** `~/.idapro/plugins`
 
-   下载本项目中的两个`py`文件：`vulnhunter.py`和`vulnhunter_mcp.py`。
+3. **(Optional, for MCP usage) Install the MCP functionality:**
 
-2. **安装插件：**
+   - Install the package via pip:
 
-   - 将 `VulnHunter.py` 文件和`vulnhunter_mcp.py` 文件一同复制到 IDA Pro 的 `plugins` 目录下。
-     - Windows: `IDA Pro\plugins`
-     - Linux/macOS: `.idapro/plugins`
+     Bash
 
-3.  （可选，如果需要使用`MCP`）**通过如下命令安装MCP功能：**
+     ```
+     pip install git+https://github.com/ALateFall/vulnhunter.git
+     ```
 
-```bash
-pip install git+https://github.com/ALateFall/vulnhunter.git
-```
+   - Then, add the following configuration to your `cline` MCP settings:
 
-随后，将如下内容复制到您的`cline`的`mcp`配置：
+     JSON
 
-```json
-{
-  "mcpServers": {
-    "vulnhunter": {
-      "disabled": false,
-      "timeout": 60,
-      "type": "stdio",
-      "command": "vulnhunter",
-    }
-  }
-}
-```
+     ```
+     {
+       "mcpServers": {
+         "vulnhunter": {
+           "disabled": false,
+           "timeout": 60,
+           "type": "stdio",
+           "command": "vulnhunter"
+         }
+       }
+     }
+     ```
 
-## 🚀 使用指南
+### 🚀 Usage Guide
 
-1. 启动 IDA Pro 并加载您的目标文件。
-2. （可选，如果需要使用`MCP`）打开您的`MCP`平台，例如`cline`。`VulnHunter`会自动将`MCP`连接到您的平台。（可能需要刷新一下该`mcp`）
-3. 根据您的需求使用相应的功能：
-   - **调用链高亮:** 在反汇编窗口中，右键点击起始函数选择 `VulnHunter: Set as Call Chain Start`，再右键点击目标函数选择 `VulnHunter: Set as Call Chain End`。插件将自动高亮第一条路径。使用 `Shift+N` 切换到下一条路径。
-   - **高级交叉引用:** 在主界面中打开“高级交叉引用”选项卡，选择目标函数或全局变量，并设置您的筛选条件，然后点击“查询”。
+1. Start IDA Pro and load your target binary.
+2. (Optional, for MCP usage) Open your MCP platform (e.g., `cline`). VulnHunter will automatically connect to your platform. (You may need to refresh the MCP connection).
+3. Use the features as needed:
+   - **Highlight Call Chain:** In the disassembly view, right-click the starting address of the source function and select `VulnHunter/Set As Start Addr`. Then, right-click on the destination function and select `VulnHunter/Set As Dest Addr`. Once both addresses are set, right-click anywhere and select `VulnHunter/VulnHunter Hunts`. All call chains will be printed in the Output window. Use `Shift+I` to cycle through highlighting the different chains.
+   - **Advanced Cross-References:** Open the "Advanced Cross-References" tab in the main interface, select the target function or global variable, set your filter conditions, and click "Query".
 
-## 🤝 如何贡献
+### 🤝 How to Contribute
 
-我们热烈欢迎来自社区的任何贡献！无论您是提交 Bug 报告、功能建议还是直接贡献代码，都将对本项目产生积极影响。
+We warmly welcome any contributions from the community! Whether you are submitting bug reports, suggesting new features, or contributing code directly, your input will have a positive impact on this project.
 
-## 📜 开源许可
+### 📜 License
 
-本项目采用 [MIT License](https://www.google.com/search?q=./LICENSE) 开源许可。
+This project is licensed under the [MIT License](https://www.google.com/search?q=./LICENSE).
 
 ------
 
-**免责声明：** 本工具仅供授权的安全研究和教育目的使用。使用者应对其行为负全部责任。
+**Disclaimer:** This tool is intended for authorized security research and educational purposes only. The user is responsible for all of their actions.
