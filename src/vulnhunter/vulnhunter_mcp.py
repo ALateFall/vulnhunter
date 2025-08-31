@@ -69,6 +69,9 @@ def check_mcp_connection() -> bool:
         return False
     
 
-if __name__ == "__main__":
+def main():
     if check_mcp_connection():
         mcp.run(transport='stdio')
+
+if __name__ == "__main__":
+    main()
