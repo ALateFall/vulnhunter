@@ -17,7 +17,7 @@
 
 ### 1. 函数调用链高亮😀 (Highlight Call Chain)
 
-在复杂的二进制文件中，手动追溯一个函数的调用来源或最终影响是一项极其耗时且容易出错的工作。VulnHunter 彻底改变了这一现状。
+在复杂的二进制文件中，手动追溯一个函数的调用来源或最终影响是一项极其耗时且容易出错的工作。`VulnHunter` 彻底改变了这一现状。
 
 - **起点/终点选择：** 只需在反汇编或反编译窗口中选定一个起始函数和一个目标函数。
 - **一键高亮：** 插件将自动计算并高亮显示出连接这两个函数的所有可能调用链并将结果输出到`output`窗口。
@@ -25,18 +25,21 @@
 
 ![call_chain](images/call_chain.gif)
 
-### 2. 高级交叉引用😄 (Advanced Cross-References) (Not Implement yet)
+### 2. 高级交叉引用😄 (Advanced Cross-References) 
 
 `IDA Pro` 的原生交叉引用（`Xrefs`）功能强大但相对基础。`VulnHunter` 在此之上构建了一个高级查询引擎，让您能够以更精细、更具语义化的方式筛选交叉引用。
 
-#### 对于函数💻：
+#### 常量参数筛选
 
-- **常量参数筛选：** 快速找到所有调用某函数时，传入特定常量参数（如 `0`, `NULL`, 或者某个危险标志位）的位置。
-- **上下文函数筛选：** 筛选出调用目标函数的函数中，是否还调用了别的函数。
+有时候，我们希望筛选出那些调用了常量参数的函数的交叉引用，例如`mprotect(addr, length, 7)`中的`7`。`VulnHunter`支持通过高级交叉引用来解决这个问题。通过`VulnHunter`，可以快速找到所有调用某函数时，传入特定常量参数的位置。
 
-#### 对于全局变量🔍：
+![constant](images/constant_xrefs.gif)
 
-- **赋值/使用场景分离：** 清晰地区分出对一个全局变量进行赋值（写入）和使用（读取）的所有位置。
+#### 上下文函数筛选
+
+`VulnHunter`支持进行基于上下文的交叉引用，可以筛选出调用目标函数的函数中，是否还调用了别的函数。通过设置一个危险函数，即可在交叉引用时筛选出那些调用了该危险函数的交叉引用。
+
+![context](images/context_xrefs.gif)
 
 ### 3. 自实现 MCP 与 LLM 集成🤖 (Custom MCP for LLM)
 
@@ -54,8 +57,12 @@
 - `get_function_addr_by_name`：通过函数名称获得函数地址。
 - `get_metadata`：获得`IDA`项目的元数据，例如架构、版本、反编译器状态等等。
 - `decompile_function`：获得指定地址函数的伪代码。该功能需要`IDA Pro` 的反编译功能存在才可以使用。
-- `disassemble_functiopn`：获得指定地址函数的汇编代码。
+- `disassemble_function`：获得指定地址函数的汇编代码。
 - `find_call_chain`：找到从起始函数名称到目标函数名称的函数调用链。这是`VulnHunter`的核心功能之一。
+- `find_xrefs_with_constant`：查找函数的交叉引用，必须满足包含常量参数。这是`vulnhunter`的核心功能之一。
+- `find_context_refs`：查找函数的交叉引用，该交叉引用所在的函数必须还包含了指定的另一个函数。这是`vulnhunter`的核心功能之一。
+- `list_import_table_functions`：列出程序的导入表`import_table`中的函数。
+- `list_export_table_functions`：列出程序的导出表`export_table`中的函数。
 
 ## 🔧 安装与配置
 
@@ -104,8 +111,8 @@ pip install git+https://github.com/ALateFall/vulnhunter.git
 1. 启动 IDA Pro 并加载您的目标文件。
 2. （可选，如果需要使用`MCP`）打开您的`MCP`平台，例如`cline`。`VulnHunter`会自动将`MCP`连接到您的平台。（可能需要刷新一下该`mcp`）
 3. 根据您的需求使用相应的功能：
-   - **调用链高亮:** 在反汇编窗口中，右键起始函数的起始位置选择 `VulnHunter/Set As Start Addr`，再右键点击目标函数选择 `VulnHunter/Set As Dest Addr`。在两个地址都选择完毕后，右键选择`VulnHunter/VulnHunter Hunts`。此时`output`窗口将输出所有调用链。使用`Shift+i`可以切换高亮的调用链。
-   - **高级交叉引用:** 在主界面中打开“高级交叉引用”选项卡，选择目标函数或全局变量，并设置您的筛选条件，然后点击“查询”。
+   - **调用链高亮:** 在反汇编窗口中，右键起始函数的起始位置选择 `VulnHunter:CallChain/set as start address`，再右键点击目标函数选择 `VulnHunter:CallChain/set as target address`。在两个地址都选择完毕后，右键选择`VulnHunter:CallChain/start to find call chains`。此时`output`窗口将输出所有调用链。使用`Shift+i`可以切换高亮的调用链。
+   - **高级交叉引用:** 对于常量参数函数的筛选，对函数使用鼠标右键，使用`VulnHunter:Xrefs/find xrefs with constant values`即可筛选出那些拥有常量参数的函数。使用快捷键`ctrl+x`也有同样的效果。对于上下文函数筛选，使用`vulnhunter:Xrefs/set danger function`设置危险函数，随后即可通过`vulnhunter:Xrefs/find context xrefs`来查找那些同时调用了危险函数和目标函数的交叉引用。
 
 ## 🤝 如何贡献
 
@@ -113,7 +120,7 @@ pip install git+https://github.com/ALateFall/vulnhunter.git
 
 ## 📜 开源许可
 
-本项目采用 [MIT License](https://www.google.com/search?q=./LICENSE) 开源许可。
+本项目采用 [MIT License](https://github.com/ALateFall/vulnhunter/blob/master/LICENSE) 开源许可。
 
 ------
 
