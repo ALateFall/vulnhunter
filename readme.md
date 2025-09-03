@@ -1,4 +1,6 @@
-VulnHunter - An Assistant Plugin for IDA Pro Vulnerability Hunting 🛠 [中文](https://github.com/ALateFall/vulnhunter/blob/master/readme_ch.md) | English
+# VulnHunter - An Assistant Plugin for IDA Pro Vulnerability Hunting 🛠
+
+ [中文](https://github.com/ALateFall/vulnhunter/blob/master/readme_ch.md) | English
 
 VulnHunter is an IDA Pro plugin designed for reverse engineers and vulnerability researchers to significantly improve the efficiency and depth of binary vulnerability analysis. It automates tedious manual analysis workflows through a series of powerful enhancements and introduces the analytical capabilities of Large Language Models (LLMs) based on MCP, opening up new possibilities for vulnerability hunting.
 
