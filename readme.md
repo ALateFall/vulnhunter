@@ -23,12 +23,19 @@ In a complex binary, manually tracing a function's call sources or its ultimate 
 - **One-Click Highlighting:** The plugin automatically calculates and highlights all possible call chains connecting the two functions, printing the results to the Output window.
 - **Path Switching:** When multiple call paths exist, you can use the hotkey (**Shift+I**) to quickly switch between and preview different call chains.
 
+![call_chain](images/call_chain.gif)
+
 #### 2. Advanced Cross-References 😄
 
 IDA Pro's native cross-references (Xrefs) are powerful but relatively basic. VulnHunter builds an advanced query engine on top of them, allowing you to filter cross-references in a more granular and semantic way.
 
 - **Constant Argument Filtering** Sometimes, we want to filter cross-references to functions that are called with a specific constant argument, such as the `7` in `mprotect(addr, length, 7)`. VulnHunter supports solving this problem through advanced cross-references. With VulnHunter, you can quickly find all locations where a function is called with a specific constant argument.
+
+![constant](images/constant_xrefs.gif)
+
 - **Contextual Function Filtering** VulnHunter supports context-based cross-referencing, which allows you to filter for callers of a target function that *also* call another specified function. By setting a "dangerous function," you can filter cross-references to find only those that also invoke that dangerous function.
+
+![context](images/context_xrefs.gif)
 
 #### 3. Custom MCP & LLM Integration 🤖
 
@@ -37,6 +44,8 @@ By leveraging a custom Machine Code Protocol (MCP) based on fastMCP, we seamless
 - **Functionality Exposure:** The plugin exposes its core "Find Call Chain" and "Advanced Cross-References" features as an API to the LLM.
 - **Automated Taint Analysis:** Combined with the **Highlight Call Chain** feature, you can let an LLM act as your taint analysis engine. Simply provide the LLM with a taint source and sink, and it will automatically call VulnHunter's API to find and analyze potential taint propagation paths, achieving end-to-end vulnerability discovery.
 - **Intelligent Dangerous Function Identification:** Combined with the **Advanced Cross-References** feature, an LLM can automatically execute complex queries. For example, you can write a prompt that instructs the LLM to find all calls to `memcpy` where the length argument originates from user input and analyze if a buffer overflow risk exists.
+
+![mcp](images/mcp.gif)
 
 Currently, VulnHunter's IDA Pro MCP has implemented the following IDA Pro interfaces:
 
