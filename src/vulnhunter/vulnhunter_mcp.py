@@ -50,6 +50,34 @@ def find_call_chain(start_func_name:str, target_func_name:str) -> list:
     '''
     return ida_server.find_call_chain(start_func_name, target_func_name)
 
+@mcp.tool()
+def find_xrefs_with_constant(function_name: str) -> list:
+    '''
+    查找函数的交叉引用，必须满足包含常量参数
+    '''
+    return ida_server.find_xrefs_with_constant(function_name)
+
+@mcp.tool()
+def find_context_xrefs(function_name:str, danger_function_name:str) -> list:
+    '''
+    查找函数的交叉引用，该交叉引用所在的函数必须还包含了danger_function_name函数
+    '''
+    return ida_server.find_context_xrefs(function_name, danger_function_name)
+
+@mcp.tool()
+def list_import_table_functions()   -> list:
+    '''
+    列出导入表中的所有函数
+    '''
+    return ida_server.list_import_table_functions()
+
+@mcp.tool()
+def list_export_table_functions()   -> list:
+    '''
+    列出导出表中的所有函数
+    '''
+    return ida_server.list_export_table_functions()
+
 def check_mcp_connection() -> bool:
     """
     检查是否能成功连接到IDA Pro中运行的RPC服务器。

@@ -8,6 +8,9 @@ import idaapi # type:ignore
 import ida_xref # type:ignore
 import threading
 import idautils # type:ignore
+from ida_kernwin import Choose # type:ignore
+import ida_nalt # type:ignore
+import re
 
 # -------------------------------------------------------------
 #                     全局变量部分
@@ -19,6 +22,7 @@ ALL_PATH = []
 PATH_INDEX = 0
 PATH_COLOR_INDEX = 0
 MCP_PORT = 9673
+DANGER_ADDR = -1
 
 
 MARKED_LINES = {}            # 控制伪代码某行的颜色
@@ -52,7 +56,7 @@ class VulnHunter(ida_idaapi.plugin_t):
         self.actions = [
             ida_kernwin.action_desc_t(
                 name='vulnHunter::SetStartAddr',
-                label='Set As Start Addr',
+                label='CallChain: set as start address',
                 handler=SetStartAddrAction(),
                 shortcut=None,
                 tooltip='Set the start address of VulnHunter',
@@ -60,7 +64,7 @@ class VulnHunter(ida_idaapi.plugin_t):
             ),
             ida_kernwin.action_desc_t(
                 name='vulnHunter::SetDestAddr',
-                label='Set As Dest Addr',
+                label='CallChain: set as target address',
                 handler=SetDestAddrAction(),
                 shortcut=None,
                 tooltip='Set the point address of VulnHunter',
@@ -68,10 +72,18 @@ class VulnHunter(ida_idaapi.plugin_t):
             ),
             ida_kernwin.action_desc_t(
                 name='vulnHunter::Hunt',
-                label='VulnHunt Hunts',
+                label='CallChain: start to find call chains',
                 handler=HuntAction(),
                 shortcut='Shift-V',
                 tooltip='Begin find paths from start to destination address',
+                icon=139
+            ),
+            ida_kernwin.action_desc_t(
+                name='vulnHunter::Index',
+                label='VulnHunt Next Index',
+                handler=NextPathAction(),
+                shortcut='Shift-i',
+                tooltip='next path',
                 icon=139
             ),
             ida_kernwin.action_desc_t(
@@ -83,13 +95,31 @@ class VulnHunter(ida_idaapi.plugin_t):
                 icon=139
             ),
             ida_kernwin.action_desc_t(
-                name='vulnHunter::Index',
-                label='VulnHunt Next Index',
-                handler=NextPathAction(),
-                shortcut='Shift-i',
-                tooltip='next path',
+                name='vulnHunter::ConstantXrefs',
+                label='Xrefs: find xrefs with constant value params',
+                handler=ConstantXrefsAction(),
+                shortcut='Ctrl+x',
+                tooltip='find xrefs with constant value params',
                 icon=139
             ),
+            ida_kernwin.action_desc_t(
+                name='vulnHunter::ContextXrefs',
+                label='Xrefs: find context xrefs',
+                handler=ContextXrefsAction(),
+                shortcut='',
+                tooltip='set danger function for context xrefs',
+                icon=139
+            ),
+            ida_kernwin.action_desc_t(
+                name='vulnHunter::SetDangerFunction',
+                label='Xrefs: set danger function',
+                handler=SetContextXrefsAction(),
+                shortcut='',
+                tooltip='set danger function for context xrefs',
+                icon=139
+            ),
+
+            # SetContextXrefsAction
         ]
         
         for action in self.actions:
@@ -211,12 +241,14 @@ def set_color_by_ctx(ctx, color):
             coord = pseudo_line_t(vu.cfunc.entry_ea, _place_to_line_number(loc.place()))
             
             # 如果已经设置了颜色，则清除颜色
+            
             if coord in MARKED_LINES.keys():
                 del MARKED_LINES[coord]
             else:
                 MARKED_LINES[coord] = color
             
             ida_kernwin.refresh_custom_viewer(ctx.widget) # 手动刷新伪代码窗口，触发UI Hook
+        
 
 def clear_color_by_ctx(ctx):
     global MARKED_LINES
@@ -365,7 +397,7 @@ def _find_paths_recursive(current_ea, target_ea, current_path):
 def set_ea_comment(ea, comment):
     current_widget = ida_kernwin.get_current_widget()
     if ida_kernwin.get_widget_type(current_widget) != idaapi.BWN_PSEUDOCODE:
-        print("Please make sure the pseudocode view is the active window.")
+        ida_kernwin.msg("VulnHunter: Please make sure the pseudocode view is the active window.\n")
     else:
         # 获取 Hex-Rays 视图对象 (vdui_t)
         vdui = ida_hexrays.get_widget_vdui(current_widget)
@@ -413,7 +445,11 @@ def open_port_for_mcp():
             'get_metadata': _get_metadata,
             'decompile_function': _decompile_function,
             'disassemble_function': _disassemble_function,
-            'find_call_chain': _find_call_chain
+            'find_call_chain': _find_call_chain,
+            'find_xrefs_with_constant': _find_xrefs_with_constant,
+            'find_context_xrefs': _find_context_xrefs,
+            'list_import_table_functions': _list_import_table_functions,
+            'list_export_table_functions': _list_export_table_functions,
         }
         
         for funcname in rpc_functions.keys():
@@ -425,6 +461,227 @@ def open_port_for_mcp():
             ida_kernwin.msg(f"VulnHunter: RPC server encountered an error: {e}\n")
             
 
+# -------------------------------------------------------------
+#           自定义函数 - 高级交叉引用 - 常量参数筛选
+# -------------------------------------------------------------
+
+# 利用交叉引用，获取当前光标的函数名称
+def get_function_name_at_cursor():
+    current_ea = ida_kernwin.get_screen_ea()
+    
+    if current_ea == idaapi.BADADDR:
+        return None
+
+    x = ida_xref.xrefblk_t()
+    ok = x.first_from(current_ea, ida_xref.XREF_ALL)
+    while ok:
+        if x.type == ida_xref.fl_CN or x.type == ida_xref.fl_CF:
+            callee_func = ida_funcs.get_func(x.to)
+            if callee_func:
+                callee_name = ida_funcs.get_func_name(callee_func.start_ea)
+                return (callee_name, callee_func.start_ea)
+        ok = x.next_from()
+
+    enclosing_func = ida_funcs.get_func(current_ea)
+    if enclosing_func and enclosing_func.start_ea <= current_ea < enclosing_func.end_ea:
+        enclosing_name = ida_funcs.get_func_name(enclosing_func.start_ea)
+        return (enclosing_name, enclosing_func.start_ea)
+    return None
+
+
+def get_decompiled_line(cfunc, ea):
+    """
+    从一个反编译对象(cfunc)中获取指定地址(ea)对应的伪代码行。
+    """
+    if ea not in cfunc.eamap:
+        ida_kernwin.msg(f"VulnHunter: An unknown error happens: The ea 0x{ea:x} seems not to be in the function.\n")
+        return None
+
+    insnvec = cfunc.eamap[ea] # 获取AST
+    lines = []
+    for stmt in insnvec:
+        # 使用 qstring_printer_t 将 AST 节点转换为字符串
+        qp = ida_hexrays.qstring_printer_t(cfunc, False)
+        stmt._print(0, qp)
+        s = qp.s.split('\n')[0]
+        lines.append(s)
+    
+    return '\n'.join(lines)
+
+def find_advanced_xrefs(target_ea):
+    """
+    通过ea，找到交叉引用它的伪代码行。
+    返回值暂定为一个列表，每个列表里面是个字典：）
+    """
+    if not ida_hexrays.init_hexrays_plugin():
+        ida_kernwin.msg('VulnHunter: You seem not to have a decompiler. Please check your IDA setup.\n')
+        return None
+
+    results = []
+    
+    # 找到所有引用到 target_ea 的来源地址
+    try:
+        referencing_addresses = [x.frm for x in idautils.XrefsTo(target_ea)]
+    except:
+        return [] # 没有找到那肯定为空了
+
+    # 遍历每一个引用来源
+    for ref_ea in referencing_addresses:
+        # 反编译包含该引用的函数
+        try:
+            cfunc = ida_hexrays.decompile(ref_ea)
+        except ida_hexrays.DecompilationFailure:
+            cfunc = None
+
+        if not cfunc:
+            ida_kernwin.msg("VulnHunter: Compilation Failed. You should check your IDA setup.\n")
+            continue
+        
+        # 获取引用地址对应的伪代码行
+        line_text = get_decompiled_line(cfunc, ref_ea)
+        if line_text is None:
+            continue
+            
+        # 获取函数名并组合结果
+        function_name = ida_funcs.get_func_name(cfunc.entry_ea) or ""
+        
+        results.append({
+            'address': ref_ea,
+            'function': function_name,
+            'line': line_text.strip()
+        })
+        
+    return results
+
+# 点击交叉引用的表格会触发这个函数，使得其跳转到指定地址
+def xrefs_table_jump(selected_item):
+    address = selected_item[0]
+    try:
+        # ida_kernwin.msg(f"Jump!\n")
+        address_ea = int(address, 16)
+        ida_kernwin.jumpto(address_ea)
+    except (ValueError, TypeError):
+        ida_kernwin.msg(f"VulnHunter: jump to address 0x{address} failed.\n")
+
+# 判断是否有常量参数
+def has_constant_argument(code_line: str, function_name: str) -> bool:
+    pattern = re.compile(r"\b" + re.escape(function_name) + r"\s*\((.*)\)")
+    match = pattern.search(code_line)
+
+    if not match:
+        return False
+
+    args_str = match.group(1)
+    if not args_str.strip():
+        return False
+
+    args = args_str.split(',')
+    
+
+    # 遍历每个参数，检查其是否为常量
+    for arg in args:
+        arg = arg.strip() # 去除参数两边的空格
+
+        # 检查是否为字符串字面量
+        if arg.startswith('"') and arg.endswith('"'):
+            return True
+            
+        if arg.startswith("'") and arg.endswith("'"):
+            return True
+        
+        # 检查是不是数字
+        try:
+            if arg.lower().startswith('0x'):
+                int(arg, 16)
+            else:
+                float(arg)
+            return True
+        except ValueError:
+            continue
+
+    return False
+
+
+# -------------------------------------------------------------
+#           自定义函数 - 高级交叉引用 - 上下文函数筛选
+# -------------------------------------------------------------
+
+# 查找所有调用了 xref_addr 的函数，并检查这些函数是否也调用了 target_addr。
+def get_context_function(xref_addr, target_addr):
+    """
+    查找所有调用了 xref_addr 的函数，并检查这些函数是否也调用了 target_addr。
+    """
+    # 获取并验证两个输入地址对应的函数
+    xref_func = ida_funcs.get_func(xref_addr)
+    target_func = ida_funcs.get_func(target_addr)
+
+    if not xref_func or not target_func:
+        ida_kernwin.msg("VulnHunter: One or both provided addresses are not in a valid function.\n")
+        return []
+
+    xref_start_ea = xref_func.start_ea
+    target_start_ea = target_func.start_ea
+
+    # 找到所有对 xref_addr 的交叉引用，并按其所在的父函数进行分组
+    callers_of_xref = {}
+    try:
+        for xref in idautils.XrefsTo(xref_start_ea):
+            caller_func = ida_funcs.get_func(xref.frm)
+            if caller_func:
+                caller_ea = caller_func.start_ea
+                if caller_ea not in callers_of_xref:
+                    callers_of_xref[caller_ea] = []
+                callers_of_xref[caller_ea].append(xref.frm)
+    except:
+        return []
+
+    # 遍历这些父函数，检查它们是否也调用了 target_addr
+    results = []
+    for caller_ea, original_xref_locations in callers_of_xref.items():
+        caller_func_obj = ida_funcs.get_func(caller_ea)
+        if not caller_func_obj:
+            continue
+
+        calls_target_func = False
+        fii = idaapi.func_item_iterator_t(caller_func_obj)
+        while fii.next_code():
+            instruction_ea = fii.current()
+            x = ida_xref.xrefblk_t()
+            ok = x.first_from(instruction_ea, ida_xref.XREF_ALL)
+            while ok:
+                if x.type == ida_xref.fl_CN or x.type == ida_xref.fl_CF:
+                    callee_func = ida_funcs.get_func(x.to)
+                    if callee_func and callee_func.start_ea == target_start_ea:
+                        calls_target_func = True
+                        break
+                ok = x.next_from()
+            if calls_target_func:
+                break
+        
+        # 如果该父函数满足条件，则处理其对 xref_addr 的所有交叉引用:)
+        if calls_target_func:
+            try:
+                cfunc = ida_hexrays.decompile(caller_ea)
+            except ida_hexrays.DecompilationFailure:
+                cfunc = None
+
+            if not cfunc:
+                ida_kernwin.msg(f"VulnHunter: Decompilation failed for function at 0x{caller_ea:x}.\n")
+                continue
+            
+            function_name = ida_funcs.get_func_name(cfunc.entry_ea) or ""
+            
+            # 为了满足渲染表格，生成字典
+            for ref_ea in original_xref_locations:
+                line_text = get_decompiled_line(cfunc, ref_ea)
+                if line_text:
+                    results.append({
+                        'address': ref_ea,
+                        'function': function_name,
+                        'line': line_text.strip()
+                    })
+            
+    return results
 
 # -------------------------------------------------------------
 #                     动作部分
@@ -532,19 +789,123 @@ class NextPathAction(ida_kernwin.action_handler_t):
     
     def update(self, ctx):
         return ida_kernwin.AST_ENABLE_ALWAYS
+    
+class ConstantXrefsAction(ida_kernwin.action_handler_t):
+    def __init__(self):
+        ida_kernwin.action_handler_t.__init__(self)
+    
+    def activate(self, ctx):
+        func_name, ea = get_function_name_at_cursor()
+        func = ida_funcs.get_func(ea)
+        
+        # ida_kernwin.msg(f"The func_name: {func_name}, ea: 0x{ea:x}.\n")
+        if not func:
+            return
+        
+        
+        xrefs_list = find_advanced_xrefs(ea)
+        xrefs_data_ = [[hex(i['address']), i['function'], i['line']] for i in xrefs_list]
+        xrefs_data = []
+        
+        for line in xrefs_data_:
+            code = line[2]
+            if has_constant_argument(code, func_name):
+                xrefs_data.append(line)
+        
+        c = XrefsTable(
+            f"vulnhunter constant xrefs to {func_name}",
+            items=xrefs_data,
+            on_ok_callback=xrefs_table_jump
+        )
+        
+        c.show()
+        
+        return 1
+    
+    def update(self, ctx):
+        return ida_kernwin.AST_ENABLE_ALWAYS
+
+# 设置危险函数的地址
+class SetContextXrefsAction(ida_kernwin.action_handler_t):
+    def __init__(self):
+        ida_kernwin.action_handler_t.__init__(self)
+    
+    def activate(self, ctx):
+        global DANGER_ADDR
+        func_name, ea = get_function_name_at_cursor()
+        DANGER_ADDR = ea
+        ida_kernwin.msg(f"VulnHunter: The dangerous function is set to {func_name}(0x{DANGER_ADDR:x}).\n")
+        return 1
+    
+    def update(self, ctx):
+        return ida_kernwin.AST_ENABLE_ALWAYS
+
+class ContextXrefsAction(ida_kernwin.action_handler_t):
+    def __init__(self):
+        ida_kernwin.action_handler_t.__init__(self)
+    
+    def activate(self, ctx):
+        if DANGER_ADDR == -1:
+            ida_kernwin.msg(f"VulnHunter: The dangerous function is not set. Please set it first.\n")
+            return 
+        
+        func_name, ea = get_function_name_at_cursor()
+        func = ida_funcs.get_func(ea)
+        
+        # ida_kernwin.msg(f"The func_name: {func_name}, ea: 0x{ea:x}.\n")
+        if not func:
+            return
+        
+        xrefs_list = get_context_function(ea, DANGER_ADDR)
+        # print(xrefs_list)
+        
+        xrefs_data = [[hex(i['address']), i['function'], i['line']] for i in xrefs_list]
+        
+        c = XrefsTable(
+            f"vulnhunter context xrefs to {func_name}",
+            items=xrefs_data,
+            on_ok_callback=xrefs_table_jump
+        )
+        
+        c.show()
+        
+        return 1
+    
+    def update(self, ctx):
+        return ida_kernwin.AST_ENABLE_ALWAYS
 
 class TestAction(ida_kernwin.action_handler_t):
     def __init__(self):
         ida_kernwin.action_handler_t.__init__(self)
     
     def activate(self, ctx):
-        ea = 0x1203
-
-            
+        
+        print(get_context_function(0x1169, 0x11A7))
         return 1
     
     def update(self, ctx):
         return ida_kernwin.AST_ENABLE_ALWAYS
+
+# 这个是点击交叉引用表格时，跳转到交叉引用的地方的一个动作
+class XrefsTableJumpsAction(ida_kernwin.action_handler_t):
+    def __init__(self, thing):
+        ida_kernwin.action_handler_t.__init__(self)
+        self.thing = thing
+
+    def activate(self, ctx):
+        sel = []
+        for idx in ctx.chooser_selection:
+            sel.append(str(idx))
+
+    def update(self, ctx):
+        return ida_kernwin.AST_ENABLE_FOR_WIDGET \
+            if ida_kernwin.is_chooser_widget(ctx.widget_type) \
+          else ida_kernwin.AST_DISABLE_FOR_WIDGET
+
+    @staticmethod
+    def compose_action_name(v):
+        return "choose:act%s" % v
+
 
 # -------------------------------------------------------------
 #                     UI 部分
@@ -559,19 +920,33 @@ class RightMouseHook(ida_kernwin.UI_Hooks):
         widget表示窗口
         popup_handle表示正在被构建的右键菜单本身
         """
-        action_names = [
+        call_chain_action_names = [
             "vulnHunter::SetStartAddr",
             "vulnHunter::SetDestAddr",
             'vulnHunter::Hunt',
-            'vulnHunter::Test'
         ]
         
-        for action_name in action_names:
+        xrefs_action_names = [
+            'vulnHunter::ConstantXrefs',
+            'vulnHunter::SetDangerFunction',
+            'vulnHunter::ContextXrefs',
+            # 'vulnHunter::Test',
+        ]
+        
+        for action_name in call_chain_action_names:
+            ida_kernwin.attach_action_to_popup(
+                widget=widget,                            # 当前窗口
+                popup_handle=popup_handle,                # 当前右键菜单
+                name=action_name,                         # 附加所有注册的动作名称
+                popuppath='VulnHunter:CallChain/'         # 位于右键菜单的VulnHunter/下 
+            )
+        
+        for action_name in xrefs_action_names:
             ida_kernwin.attach_action_to_popup(
                 widget=widget,                  # 当前窗口
                 popup_handle=popup_handle,      # 当前右键菜单
                 name=action_name,               # 附加所有注册的动作名称
-                popuppath='VulnHunter/'         # 位于右键菜单的VulnHunter/下 
+                popuppath='VulnHunter:Xrefs/'   # 位于右键菜单的VulnHunter/下 
             )
             
 class pseudocode_lines_rendering_hooks_t(ida_kernwin.UI_Hooks):
@@ -598,6 +973,47 @@ class pseudocode_lines_rendering_hooks_t(ida_kernwin.UI_Hooks):
                         e = ida_kernwin.line_rendering_output_entry_t(line) # 获得该行的渲染条目
                         e.bg_color = color_num
                         out.entries.push_back(e) # 将修改后的渲染条目添加到输出列表out，覆盖样式
+                        
+
+# 交叉引用的表格部分
+class XrefsTable(Choose):
+    def __init__(self,
+                 title,
+                 items,
+                 on_ok_callback=None,
+                 modal=False):
+        Choose.__init__(
+            self,
+            title,
+            [ ["Address", 15], ["Function", 30], ["Code", 50] ],
+            Choose.CH_RESTORE | Choose.CH_CAN_EDIT,
+            )
+
+        self.items = items
+        self.on_ok = on_ok_callback
+        self.modal = modal
+        self.icon = 5
+
+    def OnGetSize(self):
+        return len(self.items)
+
+    def OnGetLine(self, n):
+        return self.items[n]
+
+    def OnSelectLine(self, n):
+        if self.on_ok:
+            self.on_ok(self.items[n])
+        return (Choose.NOTHING_CHANGED,)
+
+    def OnEditLine(self, n):
+        pass
+
+    def OnClose(self):
+        pass
+
+    def show(self):
+        return self.Show(self.modal)
+
 
 
 # ida扫描到该函数的时候，才会认为这是一个插件，因此必须存在，且返回加载器
@@ -656,14 +1072,20 @@ def _get_function_name_by_addr(addr):
 def _get_function_addr_by_name(name):
     return idc.get_name_ea_simple(name)
 
+
 @mcp_rpc()
 def _get_metadata():
     class IDAMetadata:
         def __init__(self):
-            self.version = idaapi.get_kernel_version()
-            self.is_64bit = idaapi.get_inf_structure().is_64bit()
-            self.is_hexrays_available = ida_hexrays.init_hexrays_plugin() is not None
-            self.mcp_port = MCP_PORT
+            self.path = idaapi.get_input_file_path()
+            self.module = idaapi.get_root_filename()
+            self.base = hex(idaapi.get_imagebase())
+            self.md5 = ida_nalt.retrieve_input_file_md5()
+            self.sha256 = ida_nalt.retrieve_input_file_sha256()
+            self.crc32 = hex(ida_nalt.retrieve_input_file_crc32())
+            self.filesize = hex(ida_nalt.retrieve_input_file_size())
+        def __repr__(self):
+            return f"IDAMetadata(path={self.path}, module={self.module}, base={self.base}, md5={self.md5}, sha256={self.sha256}, crc32={self.crc32}, filesize={self.filesize})"
     return IDAMetadata()
 
 @mcp_rpc()
@@ -705,3 +1127,72 @@ def _find_call_chain(start_func, target_func):
         return_paths.append(f"  Call Chain {i+1}: {path_str}")
     
     return return_paths
+
+@mcp_rpc()
+def _find_xrefs_with_constant(function_name):
+    ea = idc.get_name_ea_simple(function_name)
+    if ea == idc.BADADDR:
+        return []
+    
+    xrefs_list = find_advanced_xrefs(ea)
+    xrefs_data_ = [[hex(i['address']), i['function'], i['line']] for i in xrefs_list]
+    xrefs_data = []
+    
+    for line in xrefs_data_:
+        code = line[2]
+        if has_constant_argument(code, function_name):
+            item = {
+                'address': line[0],
+                'function': line[1],
+                'code': line[2]
+            }
+            xrefs_data.append(item)
+    
+    return xrefs_data
+
+@mcp_rpc()
+def _find_context_xrefs(function_name, danger_function_name):
+    danger_ea = idc.get_name_ea_simple(danger_function_name)
+    if danger_ea == idc.BADADDR:
+        return []
+    
+    ea = idc.get_name_ea_simple(function_name)
+    if ea == idc.BADADDR:
+        return []
+    
+    xrefs_list = get_context_function(ea, danger_ea)
+    
+    return xrefs_list
+
+
+@mcp_rpc()
+def _list_import_table_functions():
+    imports = []
+    nimps = ida_nalt.get_import_module_qty()  # Get the number of import modules
+    for i in range(nimps):
+        module_name = ida_nalt.get_import_module_name(i)
+        if not module_name:
+            continue
+        def callback(ea, name, ordinal):
+            if name:
+                imports.append({
+                    'module': module_name,
+                    'function': name,
+                    'address': hex(ea)
+                })
+            return True
+        ida_nalt.enum_import_names(i, callback)
+    return imports
+
+
+@mcp_rpc()
+def _list_export_table_functions():
+    exports = []
+    for entry in idautils.Entries():
+        ordinal, func_ea, _, func_name = entry
+        exports.append({
+            'function': func_name,
+            'address': hex(func_ea)
+        })
+    return exports
+
